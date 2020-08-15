@@ -6,6 +6,7 @@ scalaVersion := "2.11.12"
 
 val kafkaVersion= "2.4.0"
 val sparkVersion = "2.4.5"
+val log4jVersion = "2.4.1"
 
 resolvers ++= Seq(
   "bintray-spark-packages" at "https://dl.bintray.com/spark-packages/maven",
@@ -27,8 +28,13 @@ libraryDependencies ++= Seq(
   //low-level integration
   "org.apache.spark" %% "spark-streaming-kafka-0-10" % sparkVersion,
 
+  // logging
+  "org.apache.logging.log4j" % "log4j-api" % log4jVersion,
+  "org.apache.logging.log4j" % "log4j-core" % log4jVersion,
+
   //kafka
   "org.apache.kafka" %% "kafka" % kafkaVersion,
   "org.apache.kafka" % "kafka-streams" % kafkaVersion
+
 
 )

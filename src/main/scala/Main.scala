@@ -3,37 +3,66 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{col, length}
 import Utillities._
 import Schema._
+import com.sun.corba.se.internal.CosNaming.BootstrapServer
 import org.apache.kafka.streams.state.internals.TimestampedKeyValueStoreBuilder
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.types.TimestampType
 
 import scala.concurrent.duration._
 
 object Main {
 
-  val trigger=5.minutes
   val spark = SparkSession.builder()
     .appName("twitter-consumer")
-    .master("local[2]")
     .getOrCreate()
 
-  val bootstrapserver="slave1:9092,slave2:9092,slave3:9092"
-  val topic="twitter-test"
 
-  def readFromKafka(): Dataset[Row] ={
+//  val bootstrapserver="slave1:9092,slave2:9092,slave3:9092"
+
+  def main(args: Array[String]): Unit = {
+    val topic= args(0)
+    val bootstrapserver=args(1)
+    val time=args(2)
+    val duration=args(3)
+    val format=args(4)
+    var trigger=time.toInt.hours
+    if(duration.equals("seconds")){
+      trigger=time.toInt.seconds
+    }else if(duration.equals("minutes")){
+      trigger=time.toInt.minutes
+    }
+
+    val tweet = readFromKafka(topic,bootstrapserver)
+    val file=writeToFile(
+      tweet,
+      format,
+      "data/twitter/result",
+      "data/twitter/checkpoint",
+      trigger)
+
+    //writeToConsole(tweet)
+    val console=writeToConsole(tweet,trigger)
+
+    file.awaitTermination()
+    console.awaitTermination()
+  }
+
+  /**
+   * read twitter data stream from kafka
+   * @return
+   */
+  def readFromKafka(topic:String,bootstrapServer: String): Dataset[Row] ={
     val twitterDF: DataFrame= spark.readStream
       .format("kafka")
-      .option("kafka.bootstrap.servers",bootstrapserver)
+      .option("kafka.bootstrap.servers",bootstrapServer)
       .option("subscribe",topic)
       .load()
 
 
     setupLogging()
-//    twitterDF.printSchema()
 
     import spark.implicits._
     val tweetDF=twitterDF.select(col("offset"),from_json(expr("cast(value as string)"),payloadStruct) as ("tweet"))
-    tweetDF.printSchema()
     val structuredTweetDF= tweetDF
         .select(
           $"offset",
@@ -77,40 +106,43 @@ object Main {
           $"tweet.payload.User.Verified",
           $"tweet.payload.User.Lang".as("UserLang"),
           $"tweet.payload.Retweet",
-          expr("tweet.payload.Lang as TweetLang"),
+          expr("tweet.payload.Lang"),
           expr("cast(tweet.payload.UserMentionEntities.Name as String)") as("Metions"),
           expr("cast(tweet.payload.HashtagEntities.Text as String)") as ("Hashtags"),
           $"tweet.payload.RetweetCount",
           $"tweet.payload.RetweetedByMe",
           $"tweet.payload.PossiblySensitive",
           expr("cast(tweet.payload.withheldInCountries as String)") as ("witheldIn")
-
         ).filter($"tweet.payload.Lang"==="in")
          .where("tweet.payload.Text IS NOT NULL AND tweet.payload.CreatedAt IS NOT NULL AND")
 
-      structuredTweetDF.printSchema()
       structuredTweetDF
+        .withColumn("Year",getYear(col("CreatedAt")))
+        .withColumn("Month",getMonth(col("CreatedAt")))
+        .withColumn("Day",getDay(col("CreatedAt")))
+
   }
 
-  def writeToCSV(structuredTweetDF: Dataset[Row])={
-    structuredTweetDF
+  def writeToFile(structuredTweetDF: Dataset[Row],format :String, path:String, checkpoint:String,trigger:FiniteDuration): StreamingQuery={
+    val result=structuredTweetDF
       .writeStream
-      .format("csv")
+      .format(format)
       .outputMode("append")
       .trigger(
         Trigger.ProcessingTime(trigger)
       )
-      .partitionBy("CreatedAt")
+      .partitionBy("Year","Month","Day")
       .option("header",true)
       .option("truncate",false)
-      .option("path","D:/dump/twitter/result")
-      .option("checkpointLocation","D:/dump/twitter/result/checkpoint")
+      .option("path",path)
+      .option("checkpointLocation",checkpoint)
       .start()
-      .awaitTermination()
+
+    result
   }
 
-  def writeToConsole(structuredTweetDF: Dataset[Row])={
-    structuredTweetDF
+  def writeToConsole(structuredTweetDF: Dataset[Row],trigger: FiniteDuration): StreamingQuery={
+    val result= structuredTweetDF
       .writeStream
       .format("console")
       .outputMode("append")
@@ -119,12 +151,33 @@ object Main {
       )
       .option("truncate",false)
       .start()
-      .awaitTermination()
+
+    result
   }
 
-  def main(args: Array[String]): Unit = {
-    val tweet = readFromKafka()
-//    writeToCSV(tweet)
-    writeToConsole(tweet)
+  /**
+   * User defined-function
+   */
+  private val getYear=spark.udf.register("getYear",year)
+  def year:String=>String=(column:String)=>{
+    val dateTime=column.split(" ")
+    val dates=dateTime(0).split("-")
+    dates(0)
   }
+
+
+  private val getMonth=spark.udf.register("getYear",month)
+  def month:String=>String=(column:String)=>{
+    val dateTime=column.split(" ")
+    val dates=dateTime(0).split("-")
+    dates(1)
+  }
+
+  private val getDay=spark.udf.register("getYear",day)
+  def day:String=>String=(column:String)=>{
+    val dateTime=column.split(" ")
+    val dates=dateTime(0).split("-")
+    dates(2)
+  }
+
 }

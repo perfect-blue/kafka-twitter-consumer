@@ -20,11 +20,14 @@ object Main {
 //  val bootstrapserver="slave1:9092,slave2:9092,slave3:9092"
 
   def main(args: Array[String]): Unit = {
+    //Input
     val topic= args(0)
     val bootstrapserver=args(1)
     val time=args(2)
     val duration=args(3)
     val format=args(4)
+    val path=args(5)
+
     var trigger=time.toInt.hours
     if(duration.equals("seconds")){
       trigger=time.toInt.seconds
@@ -32,13 +35,10 @@ object Main {
       trigger=time.toInt.minutes
     }
 
+    //model
     val tweet = readFromKafka(topic,bootstrapserver)
-    val file=writeToFile(
-      tweet,
-      format,
-      "data/twitter/result",
-      "data/twitter/checkpoint",
-      trigger)
+    val file=writeToFile(tweet, format, path+"/result",
+      path+"/checkpoint", trigger)
 
     //writeToConsole(tweet)
     val console=writeToConsole(tweet,trigger)
@@ -56,6 +56,7 @@ object Main {
       .format("kafka")
       .option("kafka.bootstrap.servers",bootstrapServer)
       .option("subscribe",topic)
+      .option("startingoffsets","latest")
       .load()
 
 

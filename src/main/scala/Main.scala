@@ -12,46 +12,46 @@ import scala.concurrent.duration._
 
 object Main {
 
-  val spark = SparkSession.builder()
-    .appName("twitter-consumer")
-    .getOrCreate()
-
-
-//  val bootstrapserver="slave1:9092,slave2:9092,slave3:9092"
-
   def main(args: Array[String]): Unit = {
+    val spark=initializeSession
+
     //Input
-    val topic= args(0)
+    val topic = args(0)
     val bootstrapserver=args(1)
-    val time=args(2)
-    val duration=args(3)
-    val format=args(4)
-    val path=args(5)
+    val duration=args(2)
+    val format=args(3)
+    val path=args(4)
 
-    var trigger=time.toInt.hours
-    if(duration.equals("seconds")){
-      trigger=time.toInt.seconds
-    }else if(duration.equals("minutes")){
-      trigger=time.toInt.minutes
-    }
+    val trigger=duration.toInt.seconds
+    val tweet=readFromKafka(spark,topic,bootstrapserver)
+    val file =writeToFile(tweet, format,
+      path+"/result/"+format,
+      path+"/checkpoint",
+      trigger)
 
-    //model
-    val tweet = readFromKafka(topic,bootstrapserver)
-    val file=writeToFile(tweet, format, path+"/result",
-      path+"/checkpoint", trigger)
-
-    //writeToConsole(tweet)
     val console=writeToConsole(tweet,trigger)
 
     file.awaitTermination()
     console.awaitTermination()
   }
 
+
+  def initializeSession:SparkSession={
+    val spark = SparkSession.builder()
+      .appName("twitter-consumer")
+      .getOrCreate()
+
+    spark
+  }
+
   /**
    * read twitter data stream from kafka
    * @return
    */
-  def readFromKafka(topic:String,bootstrapServer: String): Dataset[Row] ={
+  def readFromKafka(spark:SparkSession,topic:String,bootstrapServer: String): Dataset[Row] ={
+    /**
+     * Read Stream
+     */
     val twitterDF: DataFrame= spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers",bootstrapServer)
@@ -59,9 +59,15 @@ object Main {
       .option("startingoffsets","latest")
       .load()
 
-
+    //clear logs
     setupLogging()
 
+    //register UDF
+    val getYear=spark.udf.register("getYear",year)
+    val getMonth=spark.udf.register("getYear",month)
+    val getDay=spark.udf.register("getYear",day)
+
+    //transform stream
     import spark.implicits._
     val tweetDF=twitterDF.select(col("offset"),from_json(expr("cast(value as string)"),payloadStruct) as ("tweet"))
     val structuredTweetDF= tweetDF
@@ -124,6 +130,15 @@ object Main {
 
   }
 
+  /**
+   * Write Twitter to HDFS
+   * @param structuredTweetDF, Dataset that want to be written
+   * @param format, what is the format "CSV" or "Parquet"
+   * @param path, to which directory you want to write your data
+   * @param checkpoint, metadata location of structured streaming
+   * @param trigger, how long you should wait before the data is written
+   * @return StreamingQuery
+   */
   def writeToFile(structuredTweetDF: Dataset[Row],format :String, path:String, checkpoint:String,trigger:FiniteDuration): StreamingQuery={
     val result=structuredTweetDF
       .writeStream
@@ -142,6 +157,12 @@ object Main {
     result
   }
 
+  /**
+   * Write Twitter data to console
+   * @param structuredTweetDF
+   * @param trigger
+   * @return
+   */
   def writeToConsole(structuredTweetDF: Dataset[Row],trigger: FiniteDuration): StreamingQuery={
     val result= structuredTweetDF
       .writeStream
@@ -157,24 +178,20 @@ object Main {
   }
 
   /**
-   * User defined-function
+   * User-defined function
    */
-  private val getYear=spark.udf.register("getYear",year)
   def year:String=>String=(column:String)=>{
     val dateTime=column.split(" ")
     val dates=dateTime(0).split("-")
     dates(0)
   }
 
-
-  private val getMonth=spark.udf.register("getYear",month)
   def month:String=>String=(column:String)=>{
     val dateTime=column.split(" ")
     val dates=dateTime(0).split("-")
     dates(1)
   }
 
-  private val getDay=spark.udf.register("getYear",day)
   def day:String=>String=(column:String)=>{
     val dateTime=column.split(" ")
     val dates=dateTime(0).split("-")

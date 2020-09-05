@@ -8,11 +8,6 @@ val kafkaVersion= "2.4.0"
 val sparkVersion = "2.4.5"
 val log4jVersion = "2.4.1"
 
-resolvers ++= Seq(
-  "bintray-spark-packages" at "https://dl.bintray.com/spark-packages/maven",
-  "Typesafe Simple Repository" at "https://repo.typesafe.com/typesafe/simple/maven-releases",
-  "MavenRepository" at "https://mvnrepository.com"
-)
 
 libraryDependencies ++= Seq(
   //spark

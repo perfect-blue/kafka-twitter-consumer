@@ -26,6 +26,7 @@ object Main {
       .awaitTermination()
 
   }
+
   def main(args: Array[String]): Unit = {
     val bootstrapserver=args(0)
     val topic=args(1)

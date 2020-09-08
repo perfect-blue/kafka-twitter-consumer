@@ -6,7 +6,6 @@ scalaVersion := "2.11.12"
 
 val kafkaVersion= "2.4.0"
 val sparkVersion = "2.4.5"
-val log4jVersion = "2.4.1"
 
 libraryDependencies ++= Seq(
   //spark

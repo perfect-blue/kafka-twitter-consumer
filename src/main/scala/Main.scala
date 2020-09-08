@@ -40,11 +40,11 @@ object Main {
     val file=writeToFile(tweet, format, path+"/result",
       path+"/checkpoint", trigger)
 
-    //writeToConsole(tweet)
-    val console=writeToConsole(tweet,trigger)
+//    //writeToConsole(tweet)
+//    val console=writeToConsole(tweet,trigger)
 
     file.awaitTermination()
-    console.awaitTermination()
+//    console.awaitTermination()
   }
 
   /**

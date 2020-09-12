@@ -5,7 +5,7 @@ import Utillities._
 object Main {
 
   val spark=SparkSession.builder()
-    .appName("Twitter-Consumer")
+    .appName("test-consumer")
     .getOrCreate()
 
   def readFromKafka(bootstrapservers:String, topic:String)={

@@ -28,6 +28,8 @@ object Main {
     val format=args(4)
     val path=args(5)
 
+
+
     var trigger=time.toInt.hours
     if(duration.equals("seconds")){
       trigger=time.toInt.seconds
